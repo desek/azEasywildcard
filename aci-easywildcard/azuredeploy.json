@@ -1,0 +1,131 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "containerUri": {
+            "type": "string",
+            "metadata": {
+                "comment": "FQDN to Container Image hosted on Azure Container registry. Do not use tags.",
+                "example": "acrxxxxref.azurecr.io/yyyy.xxxx.yyy/easywildcard"
+            }
+        },
+        "EMAIL": {
+            "type": "string",
+            "metadata": {
+                "comment": "The email used for registering the certificates with Let's Encrypt.",
+                "example": "certbot@yourdomain.tld",
+                "readMore": "https://letsencrypt.org/docs/expiration-emails/"
+            }
+        },
+        "spId": {
+            "type": "string",
+            "metadata": {
+                "comment": "Guid of Service Principal with Reader role on Container Registry",
+                "example": "09894925-cedf-4fd7-1234-ac93066fb915"
+            }
+        },
+        "spPwd": {
+            "type": "string",
+            "metadata": {
+                "comment": "Password for the Service Principal.",
+                "example": "BPNfXKabdcTFeiaETlLR2WWvYeQ777IL7RNJUvU+9hU="
+            }
+        }
+    },
+    "variables": {
+        "containerName": "[split(parameters('containerUri'),'/')[2]]",
+        "domain": "[split(parameters('containerUri'),'/')[1]]",
+        "saName": "[concat('sacme', replace(variables('domain'),'.',''))]",
+        "acmeshare": "[replace(variables('domain'),'.','-')]",
+        "dnsLabel": "[replace(variables('domain'),'.','-')]",
+        "registryServer": "[split(parameters('containerUri'),'/')[0]]"
+    },
+    "resources": [
+        {
+            "name": "[variables('containerName')]",
+            "type": "Microsoft.ContainerInstance/containerGroups",
+            "apiVersion": "2018-10-01",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "containers": [
+                    {
+                        "name": "[variables('containerName')]",
+                        "properties": {
+                            "image": "[parameters('containerUri')]",
+                            "environmentVariables": [
+                                {
+                                    "name": "DOMAIN",
+                                    "value": "[variables('domain')]"
+                                },
+                                {
+                                    "name": "EMAIL",
+                                    "value": "[parameters('EMAIL')]"
+                                }
+                            ],
+                            "resources": {
+                                "requests": {
+                                    "cpu": 1,
+                                    "memoryInGB": 1.5
+                                }
+                            },
+                            "ports": [
+                                {
+                                    "port": 53,
+                                    "protocol": "UDP"
+                                }
+                            ],
+                            "volumeMounts": [
+                                {
+                                    "name": "[variables('acmeshare')]",
+                                    "mountPath": "/etc/azurefiles"
+                                },
+                                {
+                                    "name": "logs",
+                                    "mountPath": "/var/log/letsencrypt"
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "ipAddress": {
+                    "dnsNameLabel": "[variables('dnsLabel')]",
+                    "type": "Public",
+                    "ports": [
+                        {
+                            "port": 53,
+                            "protocol": "UDP"
+                        }
+                    ]
+                },
+                "volumes": [
+                    {
+                        "name": "[variables('acmeshare')]",
+                        "azureFile": {
+                            "storageAccountName": "[variables('saName')]",
+                            "storageAccountKey": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('saName')), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value]",
+                            "shareName": "[variables('acmeshare')]"
+                        }
+                    },
+                    {
+                        "name": "logs",
+                        "azureFile": {
+                            "storageAccountName": "[variables('saName')]",
+                            "storageAccountKey": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('saName')), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value]",
+                            "shareName": "logs"
+                        }
+                    }
+                ],
+                "restartPolicy": "Never",
+                "osType": "Linux",
+                "imageRegistryCredentials": [
+                    {
+                        "server": "[variables('registryServer')]",
+                        "username": "[parameters('spId')]",
+                        "password": "[parameters('spPwd')]"
+                    }
+                ]
+            }
+        }
+    ],
+    "outputs": {}
+}

@@ -1,0 +1,124 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "domainName": {
+            "type": "string",
+            "metadata": {
+                "comment": "The FQDN for the domain.",
+                "example": "yyyy.xxxx.yyy"
+            }
+        }
+    },
+    "variables": {
+        "acmeDnsCNAME": "[concat(replace(parameters('domainName'),'.','-'),'.westeurope.azurecontainer.io')]",
+        "acmeChallengeNS": "[concat('acme-dns.',parameters('domainName'))]",
+        "acmeChallengeCNAME": "[concat('acme-challenge.',parameters('domainName'))]",
+        "apimProxyCNAME": "[concat('api.',parameters('domainName'),'.trafficmanager.net')]",
+        "apimPortalCNAME": "[concat('developer.',parameters('domainName'),'.trafficmanager.net')]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Network/dnszones",
+            "apiVersion": "2016-04-01",
+            "location": "global",
+            "name": "[parameters('domainName')]",
+            "properties": {}
+        },
+        {
+            "type": "Microsoft.Network/dnszones/CAA",
+            "name": "[concat(parameters('domainName'), '/@')]",
+            "apiVersion": "2018-05-01",
+            "location": "global",
+            "dependsOn": [
+                "[parameters('domainName')]"
+            ],
+            "properties": {
+                "TTL": 3600,
+                "caaRecords": [{
+                    "flags": "0",
+                    "tag": "issue",
+                    "value": "letsencrypt.org"
+                }]
+            }
+        },
+        {
+            "type": "Microsoft.Network/dnszones/CNAME",
+            "name": "[concat(parameters('domainName'), '/acme-dns')]",
+            "apiVersion": "2016-04-01",
+            "location": "global",
+            "dependsOn": [
+                "[parameters('domainName')]"
+            ],
+            "properties": {
+                "TTL": 60,
+                "CNAMERecord": {
+                    "cname": "[variables('acmeDnsCNAME')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Network/dnszones/CNAME",
+            "name": "[concat(parameters('domainName'), '/_acme-challenge')]",
+            "apiVersion": "2016-04-01",
+            "location": "global",
+            "dependsOn": [
+                "[parameters('domainName')]"
+            ],
+            "properties": {
+                "TTL": 60,
+                "CNAMERecord": {
+                    "cname": "[variables('acmeChallengeCNAME')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Network/dnszones/NS",
+            "name": "[concat(parameters('domainName'), '/acme-challenge')]",
+            "apiVersion": "2016-04-01",
+            "location": "global",
+            "dependsOn": [
+                "[parameters('domainName')]"
+            ],
+            "properties": {
+                "TTL": 60,
+                "NSRecords": [
+                    {
+                        "nsdname": "[variables('acmeChallengeNS')]"
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/dnszones/CNAME",
+            "name": "[concat(parameters('domainName'), '/api')]",
+            "apiVersion": "2016-04-01",
+            "location": "global",
+            "dependsOn": [
+                "[parameters('domainName')]"
+            ],
+            "properties": {
+                "TTL": 60,
+                "CNAMERecord": {
+                    "cname": "[variables('apimProxyCNAME')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Network/dnszones/CNAME",
+            "name": "[concat(parameters('domainName'), '/developer')]",
+            "apiVersion": "2016-04-01",
+            "location": "global",
+            "dependsOn": [
+                "[parameters('domainName')]"
+            ],
+            "properties": {
+                "TTL": 60,
+                "CNAMERecord": {
+                    "cname": "[variables('apimPortalCNAME')]"
+                }
+            }
+        }
+    ],
+    "outputs": {}
+}
